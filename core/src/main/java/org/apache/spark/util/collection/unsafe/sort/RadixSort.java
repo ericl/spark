@@ -42,12 +42,84 @@ public class RadixSort {
   public static int sort(
       LongArray array, int numRecords, int startByteIndex, int endByteIndex,
       boolean desc, boolean signed) {
+    return sort(array, numRecords, startByteIndex, endByteIndex, desc, signed, 0, numRecords, true);
+  }
+
+  public static int sort(
+      LongArray array, int numRecords, int startByteIndex, int endByteIndex,
+      boolean desc, boolean signed, int inIndex, int outIndex, boolean allowMsd) {
+    System.out.println("estimated footprint: " + numRecords * 8);
+    if (allowMsd || numRecords * 8 > 10e6) {
+      long bitwiseMax = 0;
+      long bitwiseMin = -1L;
+      long maxOffset = array.getBaseOffset() + numRecords * 8;
+      Object baseObject = array.getBaseObject();
+      for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
+        long value = Platform.getLong(baseObject, offset);
+        bitwiseMax |= value;
+        bitwiseMin &= value;
+      }
+      long bitsChanged = bitwiseMin ^ bitwiseMax;
+      if (bitsChanged == 0) {
+        return inIndex;
+      }
+      int firstByte = -1;
+      int lastByte = -1;
+      for (int i = startByteIndex; i <= endByteIndex; i++) {
+        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
+          if (firstByte == -1) {
+            firstByte = i;
+          }
+          lastByte = i;
+        }
+      }
+      if (lastByte - firstByte > 0) {
+        // do a msd pass
+        long[] counts = new long[256];
+        for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
+          counts[(int)((Platform.getLong(baseObject, offset) >>> (lastByte * 8)) & 0xff)]++;
+        }
+        sortAtByte(
+          array, numRecords, counts, lastByte, inIndex, outIndex,
+          desc, signed && lastByte == endByteIndex);
+        // now do lsd sorts for the remaining bytes
+        int i = 0;
+        while (i < numRecords) {
+          long mask = 0xffL << (lastByte * 8);
+          long initialValue = array.get(outIndex + i) & mask;
+          System.out.println("  start = " + array.get(outIndex + i));
+          int ix = i + 1;
+          while (ix < numRecords && (array.get(outIndex + ix) & mask) == initialValue) {
+            System.out.println("          " + array.get(outIndex + ix));
+            ix++;
+          }
+          if (ix - i >= 2) {
+            System.out.println("recursive sort: " + i + ".." + ix);
+            int dest = sort(
+              array, ix - i, firstByte, lastByte - 1, desc, false, outIndex + i, inIndex + i, false);
+            if (dest != inIndex + i) {
+              System.out.println("need to copy back");
+              for (int j = i; j < ix; j++) {
+                array.set(inIndex + j, array.get(outIndex + j));
+              }
+            } else {
+              System.out.println("in place");
+            }
+          } else {
+            System.out.println("copy back: " + i + ".." + ix);
+            for (int j = i; j < ix; j++) {
+              array.set(inIndex + j, array.get(outIndex + j));
+            }
+          }
+          i = ix;
+        }
+      }
+      return inIndex;
+    }
     assert startByteIndex >= 0 : "startByteIndex (" + startByteIndex + ") should >= 0";
     assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
     assert endByteIndex > startByteIndex;
     assert numRecords * 2 <= array.size();
-    int inIndex = 0;
-    int outIndex = numRecords;
     if (numRecords > 0) {
       long[][] counts = getCounts(array, numRecords, startByteIndex, endByteIndex);
       for (int i = startByteIndex; i <= endByteIndex; i++) {
