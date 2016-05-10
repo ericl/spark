@@ -97,7 +97,7 @@ case class SortExec(
       TaskContext.get().taskMemoryManager(),
       "org.apache.spark.memory.TaskMemoryManager");
 
-    // TODO(ekl) inline the prefix comparisons
+    // TODO(ekl) inline the prefix comparisons, and maybe also the ordering?
     ctx.addReferenceObj(
       "prefixCmp", pcmp, "org.apache.spark.util.collection.unsafe.sort.PrefixComparator");
 
@@ -147,18 +147,20 @@ case class SortExec(
                 }
                 m = med3(x, l, m, n); // Mid-size, med of 3
             }
-            /* long v = x[m]; */
+
+            long vPtr = x.get(m*2);
+            long vPfx = x.get(m*2+1);
 
             // Establish Invariant: v* (<v)* (>v)* v*
             int a = off, b = a, c = off + len - 1, d = c;
             while(true) {
-                while (b <= c && le(x, b, m)) {
-                    if (eq(x, b, m))
+                while (b <= c && le(x, b, vPtr, vPfx)) {
+                    if (eq(x, b, vPtr, vPfx))
                         swap(x, a++, b);
                     b++;
                 }
-                while (c >= b && ge(x, c, m)) {
-                    if (eq(x, c, m))
+                while (c >= b && ge(x, c, vPtr, vPfx)) {
+                    if (eq(x, c, vPtr, vPfx))
                         swap(x, c, d--);
                     c--;
                 }
@@ -205,12 +207,12 @@ case class SortExec(
           return compare(x, a, b) < 0;
         }
 
-        private boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) <= 0;
-        }
-
         private boolean gt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) > 0;
+        }
+
+        private boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) <= 0;
         }
 
         private boolean ge(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
@@ -221,6 +223,21 @@ case class SortExec(
           return compare(x, a, b) == 0;
         }
 
+        private boolean le(
+            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
+          return compare(x, a, vPtr, vPfx) <= 0;
+        }
+
+        private boolean ge(
+            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
+          return compare(x, a, vPtr, vPfx) >= 0;
+        }
+
+        private boolean eq(
+            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
+          return compare(x, a, vPtr, vPfx) == 0;
+        }
+
         private int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           long prefix1 = x.get(a*2+1);
           long prefix2 = x.get(b*2+1);
@@ -228,6 +245,24 @@ case class SortExec(
           if (prefixComparisonResult == 0) {
             final long r1RecordPointer = x.get(a*2);
             final long r2RecordPointer = x.get(b*2);
+            final Object baseObject1 = memoryManager.getPage(r1RecordPointer);
+            final long baseOffset1 = memoryManager.getOffsetInPage(r1RecordPointer) + 4;
+            final Object baseObject2 = memoryManager.getPage(r2RecordPointer);
+            final long baseOffset2 = memoryManager.getOffsetInPage(r2RecordPointer) + 4;
+            return compareRecords(baseObject1, baseOffset1, baseObject2, baseOffset2);
+          } else {
+            return prefixComparisonResult;
+          }
+        }
+
+        private int compare(
+            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
+          long prefix1 = x.get(a*2+1);
+          long prefix2 = vPfx;
+          int prefixComparisonResult = prefixCmp.compare(prefix1, prefix2);
+          if (prefixComparisonResult == 0) {
+            final long r1RecordPointer = x.get(a*2);
+            final long r2RecordPointer = vPtr;
             final Object baseObject1 = memoryManager.getPage(r1RecordPointer);
             final long baseOffset1 = memoryManager.getOffsetInPage(r1RecordPointer) + 4;
             final Object baseObject2 = memoryManager.getPage(r2RecordPointer);
