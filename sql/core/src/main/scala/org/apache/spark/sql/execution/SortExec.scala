@@ -93,11 +93,21 @@ case class SortExec(
     val ctx = new CodegenContext()
     ctx.addReferenceObj("ordering", ordering, "scala.math.Ordering")
     ctx.addReferenceObj(
-      "memoryManager", SparkEnv.get.memoryManager, "org.apache.spark.memory.MemoryManager");
+      "memoryManager",
+      TaskContext.get().taskMemoryManager(),
+      "org.apache.spark.memory.TaskMemoryManager");
 
     // TODO(ekl) inline the prefix comparisons
     ctx.addReferenceObj(
       "prefixCmp", pcmp, "org.apache.spark.util.collection.unsafe.sort.PrefixComparator");
+
+    ctx.addReferenceObj("numFields", schema.length, "Integer")
+    ctx.addMutableState(
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow", "row1",
+      "row1 = new UnsafeRow(numFields);")
+    ctx.addMutableState(
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow", "row2",
+      "row2 = new UnsafeRow(numFields);")
 
     val code = s"""
       public SpecificUnsafeSorter generate(Object[] references) {
@@ -110,15 +120,12 @@ case class SortExec(
         ${ctx.declareMutableStates()}
         ${ctx.declareAddedFunctions()}
 
-        private final org.apache.spark.sql.catalyst.expressions.UnsafeRow row1;
-        private final org.apache.spark.sql.catalyst.expressions.UnsafeRow row2;
-
         public SpecificUnsafeSorter(Object[] references) {
           this.references = references;
           ${ctx.initMutableStates()}
         }
 
-        private static void sort1(org.apache.spark.unsafe.array.LongArray x, int off, int len) {
+        private void sort1(org.apache.spark.unsafe.array.LongArray x, int off, int len) {
             // Insertion sort on smallest arrays
             if (len < 7) {
                 for (int i=off; i<len+off; i++)
@@ -172,7 +179,7 @@ case class SortExec(
                 sort1(x, n-s, s);
         }
 
-        private static void swap(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private void swap(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
             long k1 = x.get(a*2);
             long v1 = x.get(a*2+1);
             x.set(a*2, x.get(b*2));
@@ -181,57 +188,57 @@ case class SortExec(
             x.set(b*2+1, v1);
         }
 
-        private static int med3(org.apache.spark.unsafe.array.LongArray x, int a, int b, int c) {
+        private int med3(org.apache.spark.unsafe.array.LongArray x, int a, int b, int c) {
             return (lt(x, a, b) ?
                     (lt(x, b, c) ? b : lt(x, a, c) ? c : a) :
                     (gt(x, b, c) ? b : gt(x, a, c) ? c : a));
         }
 
-        private static void vecswap(
+        private void vecswap(
             org.apache.spark.unsafe.array.LongArray x, int a, int b, int n) {
 
             for (int i=0; i<n; i++, a++, b++)
                 swap(x, a, b);
         }
 
-        private static boolean lt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private boolean lt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) < 0;
         }
 
-        private static boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) <= 0;
         }
 
-        private static boolean gt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private boolean gt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) > 0;
         }
 
-        private static boolean ge(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private boolean ge(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) >= 0;
         }
 
-        private static boolean eq(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private boolean eq(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           return compare(x, a, b) == 0;
         }
 
-        private static int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           long prefix1 = x.get(a*2+1);
           long prefix2 = x.get(b*2+1);
           int prefixComparisonResult = prefixCmp.compare(prefix1, prefix2);
           if (prefixComparisonResult == 0) {
-            final int r1RecordPointer = x.get(a*2);
-            final int r2RecordPointer = x.get(b*2);
-            final Object baseObject1 = memoryManager.getPage(r1recordPointer);
-            final long baseOffset1 = memoryManager.getOffsetInPage(r1recordPointer) + 4;
-            final Object baseObject2 = memoryManager.getPage(r2recordPointer);
-            final long baseOffset2 = memoryManager.getOffsetInPage(r2recordPointer) + 4;
+            final long r1RecordPointer = x.get(a*2);
+            final long r2RecordPointer = x.get(b*2);
+            final Object baseObject1 = memoryManager.getPage(r1RecordPointer);
+            final long baseOffset1 = memoryManager.getOffsetInPage(r1RecordPointer) + 4;
+            final Object baseObject2 = memoryManager.getPage(r2RecordPointer);
+            final long baseOffset2 = memoryManager.getOffsetInPage(r2RecordPointer) + 4;
             return compareRecords(baseObject1, baseOffset1, baseObject2, baseOffset2);
           } else {
             return prefixComparisonResult;
           }
         }
 
-        private static int compareRecords(
+        private int compareRecords(
             Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
           row1.pointTo(baseObj1, baseOff1, -1);
           row2.pointTo(baseObj2, baseOff2, -1);
@@ -241,13 +248,11 @@ case class SortExec(
         @Override
         public void sort(org.apache.spark.unsafe.array.LongArray arr, int lo, int hi) {
           assert lo == 0 : "Base offset must be zero";
-          baseObj = arr.getBaseObject();
-          baseOffset = arr.getBaseOffset();
           sort1(arr, 0, hi);
         }
       }"""
 
-    println(s"Generated Sort:\n${CodeFormatter.format(code)}")
+//    println(s"Generated Sort:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[UnsafeSorter]
   }
