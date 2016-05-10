@@ -38,6 +38,7 @@ import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.Utils;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorter;
 
 /**
  * External sorter based on {@link UnsafeInMemorySorter}.
@@ -90,7 +91,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
-        pageSizeBytes, inMemorySorter, false /* ignored */);
+        pageSizeBytes, inMemorySorter, false /* ignored */, null);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -106,10 +107,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      UnsafeSorter genSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
-      canUseRadixSort);
+      canUseRadixSort, genSort);
   }
 
   private UnsafeExternalSorter(
@@ -122,7 +124,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       int initialSize,
       long pageSizeBytes,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      UnsafeSorter genSort) {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -137,7 +140,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, canUseRadixSort);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, canUseRadixSort,
+        genSort);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }

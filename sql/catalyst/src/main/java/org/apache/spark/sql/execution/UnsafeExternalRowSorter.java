@@ -35,6 +35,7 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorter;
 
 public final class UnsafeExternalRowSorter {
 
@@ -60,7 +61,8 @@ public final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,
-      boolean canUseRadixSort) throws IOException {
+      boolean canUseRadixSort,
+      UnsafeSorter genSort) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -74,7 +76,8 @@ public final class UnsafeExternalRowSorter {
       prefixComparator,
       /* initialSize */ 4096,
       pageSizeBytes,
-      canUseRadixSort
+      canUseRadixSort,
+      genSort
     );
   }
 

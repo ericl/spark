@@ -57,7 +57,8 @@ public class UnsafeInMemorySorterSuite {
       mock(RecordComparator.class),
       mock(PrefixComparator.class),
       100,
-      shouldUseRadixSort());
+      shouldUseRadixSort(),
+      null);
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
     Assert.assertFalse(iter.hasNext());
   }
@@ -107,7 +108,7 @@ public class UnsafeInMemorySorterSuite {
     // Use integer comparison for comparing prefixes (which are partition ids, in this case)
     final PrefixComparator prefixComparator = PrefixComparators.LONG;
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
-      recordComparator, prefixComparator, dataToSort.length, shouldUseRadixSort());
+      recordComparator, prefixComparator, dataToSort.length, shouldUseRadixSort(), null);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {

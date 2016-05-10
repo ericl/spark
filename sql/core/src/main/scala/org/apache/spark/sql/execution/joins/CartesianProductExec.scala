@@ -47,7 +47,8 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
       null,
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
-      false)
+      false,
+      null)
 
     val partition = split.asInstanceOf[CartesianPartition]
     for (y <- rdd2.iterator(partition.s2, context)) {

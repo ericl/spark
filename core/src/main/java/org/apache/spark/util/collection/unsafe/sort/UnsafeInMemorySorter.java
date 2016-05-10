@@ -26,6 +26,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.util.collection.Sorter;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorter;
 
 /**
  * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records
@@ -69,6 +70,8 @@ public final class UnsafeInMemorySorter {
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
   @Nullable
+  private final UnsafeSorter genSort;
+  @Nullable
   private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
   @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
@@ -103,9 +106,10 @@ public final class UnsafeInMemorySorter {
     final RecordComparator recordComparator,
     final PrefixComparator prefixComparator,
     int initialSize,
-    boolean canUseRadixSort) {
+    boolean canUseRadixSort,
+    UnsafeSorter genSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), canUseRadixSort);
+      consumer.allocateArray(initialSize * 2), canUseRadixSort, genSort);
   }
 
   public UnsafeInMemorySorter(
@@ -114,11 +118,17 @@ public final class UnsafeInMemorySorter {
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
       LongArray array,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      UnsafeSorter genSort) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
-    if (recordComparator != null) {
+    this.genSort = genSort;
+    if (genSort != null) {
+      this.sorter = null;
+      this.sortComparator = null;
+      this.radixSortSupport = null;
+    } else if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
       if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
@@ -265,13 +275,18 @@ public final class UnsafeInMemorySorter {
    */
   public SortedIterator getSortedIterator() {
     int offset = 0;
-    if (sorter != null) {
+    if (genSort != null) {
+      System.out.println("using generated sorter");
+      genSort.sort(array, 0, pos / 2);
+    } else if (sorter != null) {
       if (this.radixSortSupport != null) {
+        System.out.println("using radix sort");
         // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
         // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
           array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
+        System.out.println("using tim sort");
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }

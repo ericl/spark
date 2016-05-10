@@ -22,11 +22,13 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.RadixSort;
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.collection.unsafe.sort.RadixSort
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorter
 
 /**
  * Performs (external) sorting.
@@ -64,6 +66,8 @@ case class SortExec(
     val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
 
+    val genSort = genSorter(ordering, prefixComparator)
+
     val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
@@ -77,12 +81,175 @@ case class SortExec(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort, genSort)
 
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)
     }
     sorter
+  }
+
+  def genSorter(ordering: Ordering[InternalRow], pcmp: PrefixComparator): UnsafeSorter = {
+    val ctx = new CodegenContext()
+    ctx.addReferenceObj("ordering", ordering, "scala.math.Ordering")
+    ctx.addReferenceObj(
+      "memoryManager", SparkEnv.get.memoryManager, "org.apache.spark.memory.MemoryManager");
+
+    // TODO(ekl) inline the prefix comparisons
+    ctx.addReferenceObj(
+      "prefixCmp", pcmp, "org.apache.spark.util.collection.unsafe.sort.PrefixComparator");
+
+    val code = s"""
+      public SpecificUnsafeSorter generate(Object[] references) {
+        return new SpecificUnsafeSorter(references);
+      }
+
+      class SpecificUnsafeSorter implements
+          org.apache.spark.util.collection.unsafe.sort.UnsafeSorter {
+        private Object[] references;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
+
+        private final org.apache.spark.sql.catalyst.expressions.UnsafeRow row1;
+        private final org.apache.spark.sql.catalyst.expressions.UnsafeRow row2;
+
+        public SpecificUnsafeSorter(Object[] references) {
+          this.references = references;
+          ${ctx.initMutableStates()}
+        }
+
+        private static void sort1(org.apache.spark.unsafe.array.LongArray x, int off, int len) {
+            // Insertion sort on smallest arrays
+            if (len < 7) {
+                for (int i=off; i<len+off; i++)
+                    for (int j=i; j>off && gt(x, j-1, j); j--)
+                        swap(x, j, j-1);
+                return;
+            }
+
+            // Choose a partition element, v
+            int m = off + (len >> 1);       // Small arrays, middle element
+            if (len > 7) {
+                int l = off;
+                int n = off + len - 1;
+                if (len > 40) {        // Big arrays, pseudomedian of 9
+                    int s = len/8;
+                    l = med3(x, l,     l+s, l+2*s);
+                    m = med3(x, m-s,   m,   m+s);
+                    n = med3(x, n-2*s, n-s, n);
+                }
+                m = med3(x, l, m, n); // Mid-size, med of 3
+            }
+            /* long v = x[m]; */
+
+            // Establish Invariant: v* (<v)* (>v)* v*
+            int a = off, b = a, c = off + len - 1, d = c;
+            while(true) {
+                while (b <= c && le(x, b, m)) {
+                    if (eq(x, b, m))
+                        swap(x, a++, b);
+                    b++;
+                }
+                while (c >= b && ge(x, c, m)) {
+                    if (eq(x, c, m))
+                        swap(x, c, d--);
+                    c--;
+                }
+                if (b > c)
+                    break;
+                swap(x, b++, c--);
+            }
+
+            // Swap partition elements back to middle
+            int s, n = off + len;
+            s = Math.min(a-off, b-a  );  vecswap(x, off, b-s, s);
+            s = Math.min(d-c,   n-d-1);  vecswap(x, b,   n-s, s);
+
+            // Recursively sort non-partition-elements
+            if ((s = b-a) > 1)
+                sort1(x, off, s);
+            if ((s = d-c) > 1)
+                sort1(x, n-s, s);
+        }
+
+        private static void swap(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+            long k1 = x.get(a*2);
+            long v1 = x.get(a*2+1);
+            x.set(a*2, x.get(b*2));
+            x.set(a*2+1, x.get(b*2+1));
+            x.set(b*2, k1);
+            x.set(b*2+1, v1);
+        }
+
+        private static int med3(org.apache.spark.unsafe.array.LongArray x, int a, int b, int c) {
+            return (lt(x, a, b) ?
+                    (lt(x, b, c) ? b : lt(x, a, c) ? c : a) :
+                    (gt(x, b, c) ? b : gt(x, a, c) ? c : a));
+        }
+
+        private static void vecswap(
+            org.apache.spark.unsafe.array.LongArray x, int a, int b, int n) {
+
+            for (int i=0; i<n; i++, a++, b++)
+                swap(x, a, b);
+        }
+
+        private static boolean lt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) < 0;
+        }
+
+        private static boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) <= 0;
+        }
+
+        private static boolean gt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) > 0;
+        }
+
+        private static boolean ge(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) >= 0;
+        }
+
+        private static boolean eq(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          return compare(x, a, b) == 0;
+        }
+
+        private static int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+          long prefix1 = x.get(a*2+1);
+          long prefix2 = x.get(b*2+1);
+          int prefixComparisonResult = prefixCmp.compare(prefix1, prefix2);
+          if (prefixComparisonResult == 0) {
+            final int r1RecordPointer = x.get(a*2);
+            final int r2RecordPointer = x.get(b*2);
+            final Object baseObject1 = memoryManager.getPage(r1recordPointer);
+            final long baseOffset1 = memoryManager.getOffsetInPage(r1recordPointer) + 4;
+            final Object baseObject2 = memoryManager.getPage(r2recordPointer);
+            final long baseOffset2 = memoryManager.getOffsetInPage(r2recordPointer) + 4;
+            return compareRecords(baseObject1, baseOffset1, baseObject2, baseOffset2);
+          } else {
+            return prefixComparisonResult;
+          }
+        }
+
+        private static int compareRecords(
+            Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+          row1.pointTo(baseObj1, baseOff1, -1);
+          row2.pointTo(baseObj2, baseOff2, -1);
+          return ordering.compare(row1, row2);
+        }
+
+        @Override
+        public void sort(org.apache.spark.unsafe.array.LongArray arr, int lo, int hi) {
+          assert lo == 0 : "Base offset must be zero";
+          baseObj = arr.getBaseObject();
+          baseOffset = arr.getBaseOffset();
+          sort1(arr, 0, hi);
+        }
+      }"""
+
+    println(s"Generated Sort:\n${CodeFormatter.format(code)}")
+
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[UnsafeSorter]
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

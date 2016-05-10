@@ -64,47 +64,47 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
       sortAnswers = false
     )
   }
-
-  test("sorting does not crash for large inputs") {
-    val sortOrder = 'a.asc :: Nil
-    val stringLength = 1024 * 1024 * 2
-    checkThatPlansAgree(
-      Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
-      SortExec(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
-      ReferenceSort(sortOrder, global = true, _: SparkPlan),
-      sortAnswers = false
-    )
-  }
-
-  test("sorting updates peak execution memory") {
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "unsafe external sort") {
-      checkThatPlansAgree(
-        (1 to 100).map(v => Tuple1(v)).toDF("a"),
-        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
-        (child: SparkPlan) => ReferenceSort('a.asc :: Nil, global = true, child),
-        sortAnswers = false)
-    }
-  }
-
-  // Test sorting on different data types
-  for (
-    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
-    nullable <- Seq(true, false);
-    sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
-    randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
-  ) {
-    test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
-      val inputData = Seq.fill(1000)(randomDataGenerator())
-      val inputDf = sqlContext.createDataFrame(
-        sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
-        StructType(StructField("a", dataType, nullable = true) :: Nil)
-      )
-      checkThatPlansAgree(
-        inputDf,
-        p => SortExec(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23),
-        ReferenceSort(sortOrder, global = true, _: SparkPlan),
-        sortAnswers = false
-      )
-    }
-  }
+//
+//  test("sorting does not crash for large inputs") {
+//    val sortOrder = 'a.asc :: Nil
+//    val stringLength = 1024 * 1024 * 2
+//    checkThatPlansAgree(
+//      Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
+//      SortExec(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
+//      ReferenceSort(sortOrder, global = true, _: SparkPlan),
+//      sortAnswers = false
+//    )
+//  }
+//
+//  test("sorting updates peak execution memory") {
+//    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "unsafe external sort") {
+//      checkThatPlansAgree(
+//        (1 to 100).map(v => Tuple1(v)).toDF("a"),
+//        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
+//        (child: SparkPlan) => ReferenceSort('a.asc :: Nil, global = true, child),
+//        sortAnswers = false)
+//    }
+//  }
+//
+//  // Test sorting on different data types
+//  for (
+//    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
+//    nullable <- Seq(true, false);
+//    sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
+//    randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
+//  ) {
+//    test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
+//      val inputData = Seq.fill(1000)(randomDataGenerator())
+//      val inputDf = sqlContext.createDataFrame(
+//        sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
+//        StructType(StructField("a", dataType, nullable = true) :: Nil)
+//      )
+//      checkThatPlansAgree(
+//        inputDf,
+//        p => SortExec(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23),
+//        ReferenceSort(sortOrder, global = true, _: SparkPlan),
+//        sortAnswers = false
+//      )
+//    }
+//  }
 }

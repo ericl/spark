@@ -345,7 +345,8 @@ case class WindowExec(
                   null,
                   1024,
                   SparkEnv.get.memoryManager.pageSizeBytes,
-                  false)
+                  false,
+                  null)
                 rows.foreach { r =>
                   sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0)
                 }
