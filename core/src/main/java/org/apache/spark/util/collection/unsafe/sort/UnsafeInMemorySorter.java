@@ -276,17 +276,14 @@ public final class UnsafeInMemorySorter {
   public SortedIterator getSortedIterator() {
     int offset = 0;
     if (genSort != null) {
-      System.out.println("using generated sorter");
       genSort.sort(array, 0, pos / 2);
     } else if (sorter != null) {
       if (this.radixSortSupport != null) {
-        System.out.println("using radix sort");
         // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
         // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
           array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
-        System.out.println("using tim sort");
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }
