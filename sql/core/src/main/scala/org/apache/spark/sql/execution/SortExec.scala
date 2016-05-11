@@ -127,6 +127,7 @@ case class SortExec(
       "org.apache.spark.sql.catalyst.expressions.UnsafeRow", "row2",
       "row2 = new UnsafeRow(numFields);")
 
+    val prefixOnlySort = ordering.length == 1;
     val comparisons = GenerateOrdering.genComparisons(ctx, ordering)
 
     val code = s"""
@@ -249,7 +250,7 @@ case class SortExec(
           long prefix1 = x.get(a*2+1);
           long prefix2 = x.get(b*2+1);
           int prefixComparisonResult = comparePrefix(prefix1, prefix2);
-          if (prefixComparisonResult == 0) {
+          if (prefixComparisonResult == 0 && !$prefixOnlySort) {
             final long r1RecordPointer = x.get(a*2);
             final long r2RecordPointer = x.get(b*2);
             final Object baseObject1 = memoryManager.getPage(r1RecordPointer);
@@ -267,7 +268,7 @@ case class SortExec(
           long prefix1 = x.get(a*2+1);
           long prefix2 = vPfx;
           int prefixComparisonResult = comparePrefix(prefix1, prefix2);
-          if (prefixComparisonResult == 0) {
+          if (prefixComparisonResult == 0 && !$prefixOnlySort) {
             final long r1RecordPointer = x.get(a*2);
             final long r2RecordPointer = vPtr;
             final Object baseObject1 = memoryManager.getPage(r1RecordPointer);
