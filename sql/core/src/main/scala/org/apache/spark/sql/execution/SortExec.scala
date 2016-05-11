@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistri
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.RadixSortSupport
 import org.apache.spark.util.collection.unsafe.sort.RadixSort
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorter
 
@@ -66,10 +67,10 @@ case class SortExec(
     val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
 
-    val genSort = genSorter(ordering, prefixComparator)
-
     val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+    val genSort = genSorter(ordering, prefixComparator)
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
@@ -97,9 +98,26 @@ case class SortExec(
       TaskContext.get().taskMemoryManager(),
       "org.apache.spark.memory.TaskMemoryManager");
 
-    // TODO(ekl) inline the prefix comparisons, and maybe also the ordering?
-    ctx.addReferenceObj(
-      "prefixCmp", pcmp, "org.apache.spark.util.collection.unsafe.sort.PrefixComparator");
+    val prefixComparatorCode = pcmp match {
+      case r: RadixSortSupport =>
+        if (r.sortSigned()) {
+          if (r.sortDescending()) {
+            "return (b < a) ? -1 : (b > a) ? 1 : 0;"
+          } else {
+            "return (a < b) ? -1 : (a > b) ? 1 : 0;"
+          }
+        } else {
+          if (r.sortDescending()) {
+            "return com.google.common.primitives.UnsignedLongs.compare(b, a);"
+          } else {
+            "return com.google.common.primitives.UnsignedLongs.compare(a, b);"
+          }
+        }
+      case _ =>
+        ctx.addReferenceObj(
+          "prefixCmp", pcmp, "org.apache.spark.util.collection.unsafe.sort.PrefixComparator");
+        "return prefixCmp.compare(a, b);"
+    }
 
     ctx.addReferenceObj("numFields", schema.length, "Integer")
     ctx.addMutableState(
@@ -125,11 +143,11 @@ case class SortExec(
           ${ctx.initMutableStates()}
         }
 
-        private void sort1(org.apache.spark.unsafe.array.LongArray x, int off, int len) {
+        private final void sort1(org.apache.spark.unsafe.array.LongArray x, int off, int len) {
             // Insertion sort on smallest arrays
             if (len < 7) {
                 for (int i=off; i<len+off; i++)
-                    for (int j=i; j>off && gt(x, j-1, j); j--)
+                    for (int j=i; j>off && compare(x, j-1, j) > 0; j--)
                         swap(x, j, j-1);
                 return;
             }
@@ -148,22 +166,24 @@ case class SortExec(
                 m = med3(x, l, m, n); // Mid-size, med of 3
             }
 
+            doPartition(x, m, off, len);
+        }
+
+        private final void doPartition(
+            org.apache.spark.unsafe.array.LongArray x, int m, int off, int len) {
+
             long vPtr = x.get(m*2);
             long vPfx = x.get(m*2+1);
 
             // Establish Invariant: v* (<v)* (>v)* v*
             int a = off, b = a, c = off + len - 1, d = c;
             while(true) {
-                while (b <= c && le(x, b, vPtr, vPfx)) {
-                    if (eq(x, b, vPtr, vPfx))
-                        swap(x, a++, b);
-                    b++;
-                }
-                while (c >= b && ge(x, c, vPtr, vPfx)) {
-                    if (eq(x, c, vPtr, vPfx))
-                        swap(x, c, d--);
-                    c--;
-                }
+                long res1 = partition1(x, a, b, c, vPtr, vPfx);
+                a = (int)((res1 >> 32) & 0xffffffff);
+                b = (int)(res1 & 0xffffffff);
+                long res2 = partition2(x, b, c, d, vPtr, vPfx);
+                c = (int)((res2 >> 32) & 0xffffffff);
+                d = (int)(res2 & 0xffffffff);
                 if (b > c)
                     break;
                 swap(x, b++, c--);
@@ -181,7 +201,27 @@ case class SortExec(
                 sort1(x, n-s, s);
         }
 
-        private void swap(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private final long partition1(
+            org.apache.spark.unsafe.array.LongArray x, int a, int b, int c, long vPtr, long vPfx) {
+            while (b <= c && compare(x, b, vPtr, vPfx) <= 0) {
+                if (compare(x, b, vPtr, vPfx) == 0)
+                    swap(x, a++, b);
+                b++;
+            }
+            return ((long)a) << 32 | (long)b;
+        }
+
+        private final long partition2(
+            org.apache.spark.unsafe.array.LongArray x, int b, int c, int d, long vPtr, long vPfx) {
+            while (c >= b && compare(x, c, vPtr, vPfx) >= 0) {
+                if (compare(x, c, vPtr, vPfx) == 0)
+                    swap(x, c, d--);
+                c--;
+            }
+            return ((long)c) << 32 | (long)d;
+        }
+
+        private final void swap(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
             long k1 = x.get(a*2);
             long v1 = x.get(a*2+1);
             x.set(a*2, x.get(b*2));
@@ -190,58 +230,23 @@ case class SortExec(
             x.set(b*2+1, v1);
         }
 
-        private int med3(org.apache.spark.unsafe.array.LongArray x, int a, int b, int c) {
-            return (lt(x, a, b) ?
-                    (lt(x, b, c) ? b : lt(x, a, c) ? c : a) :
-                    (gt(x, b, c) ? b : gt(x, a, c) ? c : a));
+        private final int med3(org.apache.spark.unsafe.array.LongArray x, int a, int b, int c) {
+            return (compare(x, a, b) < 0?
+                    (compare(x, b, c) < 0 ? b : compare(x, a, c) < 0 ? c : a) :
+                    (compare(x, b, c) > 0 ? b : compare(x, a, c) > 0 ? c : a));
         }
 
-        private void vecswap(
+        private final void vecswap(
             org.apache.spark.unsafe.array.LongArray x, int a, int b, int n) {
 
             for (int i=0; i<n; i++, a++, b++)
                 swap(x, a, b);
         }
 
-        private boolean lt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) < 0;
-        }
-
-        private boolean gt(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) > 0;
-        }
-
-        private boolean le(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) <= 0;
-        }
-
-        private boolean ge(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) >= 0;
-        }
-
-        private boolean eq(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
-          return compare(x, a, b) == 0;
-        }
-
-        private boolean le(
-            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
-          return compare(x, a, vPtr, vPfx) <= 0;
-        }
-
-        private boolean ge(
-            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
-          return compare(x, a, vPtr, vPfx) >= 0;
-        }
-
-        private boolean eq(
-            org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
-          return compare(x, a, vPtr, vPfx) == 0;
-        }
-
-        private int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
+        private final int compare(org.apache.spark.unsafe.array.LongArray x, int a, int b) {
           long prefix1 = x.get(a*2+1);
           long prefix2 = x.get(b*2+1);
-          int prefixComparisonResult = prefixCmp.compare(prefix1, prefix2);
+          int prefixComparisonResult = comparePrefix(prefix1, prefix2);
           if (prefixComparisonResult == 0) {
             final long r1RecordPointer = x.get(a*2);
             final long r2RecordPointer = x.get(b*2);
@@ -255,11 +260,11 @@ case class SortExec(
           }
         }
 
-        private int compare(
+        private final int compare(
             org.apache.spark.unsafe.array.LongArray x, int a, long vPtr, long vPfx) {
           long prefix1 = x.get(a*2+1);
           long prefix2 = vPfx;
-          int prefixComparisonResult = prefixCmp.compare(prefix1, prefix2);
+          int prefixComparisonResult = comparePrefix(prefix1, prefix2);
           if (prefixComparisonResult == 0) {
             final long r1RecordPointer = x.get(a*2);
             final long r2RecordPointer = vPtr;
@@ -273,7 +278,11 @@ case class SortExec(
           }
         }
 
-        private int compareRecords(
+        private final int comparePrefix(long a, long b) {
+          $prefixComparatorCode
+        }
+
+        private final int compareRecords(
             Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
           row1.pointTo(baseObj1, baseOff1, -1);
           row2.pointTo(baseObj2, baseOff2, -1);
