@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.util.{Arrays, Comparator}
 
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.Benchmark
@@ -53,15 +54,24 @@ class SortBenchmark extends BenchmarkBase {
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
-  ignore("sort") {
+  test("sort") {
     val size = 25000000
     val rand = new XORShiftRandom(123)
-    val benchmark = new Benchmark("radix sort " + size, size)
+    val benchmark = new Benchmark("in-memory sort " + size, size)
     benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
       val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
       referenceKeyPrefixSort(buf, 0, size, PrefixComparators.BINARY)
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("codegen qsort key prefix array") { timer =>
+      val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
+      val buf = new LongArray(MemoryBlock.fromLongArray(array))
+      // Do a sort without record comparisons
+      val sorter = SortExec.genSorter(0, Nil, PrefixComparators.BINARY)
+      timer.startTiming()
+      sorter.sort(buf, 0, size)
       timer.stopTiming()
     }
     benchmark.addTimerCase("reference Arrays.sort") { timer =>
@@ -115,18 +125,18 @@ class SortBenchmark extends BenchmarkBase {
     benchmark.run()
 
     /*
-      Running benchmark: radix sort 25000000
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 3.13.0-44-generic
-      Intel(R) Core(TM) i7-4600U CPU @ 2.10GHz
-
-      radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      Running benchmark: in-memory sort 25000000
+      OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-35-generic
+      Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+      in-memory sort 25000000:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       -------------------------------------------------------------------------------------------
-      reference TimSort key prefix array     15546 / 15859          1.6         621.9       1.0X
-      reference Arrays.sort                    2416 / 2446         10.3          96.6       6.4X
-      radix sort one byte                       133 /  137        188.4           5.3     117.2X
-      radix sort two bytes                      255 /  258         98.2          10.2      61.1X
-      radix sort eight bytes                    991 /  997         25.2          39.6      15.7X
-      radix sort key prefix array              1540 / 1563         16.2          61.6      10.1X
+      reference TimSort key prefix array     10961 / 11150          2.3         438.5       1.0X
+      codegen qsort key prefix array           6160 / 6195          4.1         246.4       1.8X
+      reference Arrays.sort                    1983 / 2032         12.6          79.3       5.5X
+      radix sort one byte                       127 /  137        197.2           5.1      86.4X
+      radix sort two bytes                      236 /  237        105.8           9.4      46.4X
+      radix sort eight bytes                    896 /  902         27.9          35.8      12.2X
+      radix sort key prefix array              1474 / 1595         17.0          58.9       7.4X
     */
   }
 }

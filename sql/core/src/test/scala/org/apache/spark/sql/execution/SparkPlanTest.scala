@@ -230,7 +230,7 @@ object SparkPlanTest {
     }
   }
 
-  private def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
+  def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
     val execution = new QueryExecution(sqlContext.sparkSession, null) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
