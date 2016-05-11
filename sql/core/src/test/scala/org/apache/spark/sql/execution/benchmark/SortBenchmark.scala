@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.util.{Arrays, Comparator}
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.unsafe.array.LongArray
@@ -35,6 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Benchmarks in this file are skipped in normal builds.
  */
 class SortBenchmark extends BenchmarkBase {
+  private val compares = new AtomicLong()
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
@@ -42,6 +44,7 @@ class SortBenchmark extends BenchmarkBase {
         override def compare(
           r1: RecordPointerAndKeyPrefix,
           r2: RecordPointerAndKeyPrefix): Int = {
+          compares.getAndIncrement()
           refCmp.compare(r1.keyPrefix, r2.keyPrefix)
         }
       })
@@ -55,15 +58,17 @@ class SortBenchmark extends BenchmarkBase {
   }
 
   test("sort") {
-    val size = 25000000
+    val size = 2500000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("in-memory sort " + size, size)
     benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
       val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
+      compares.set(0)
       referenceKeyPrefixSort(buf, 0, size, PrefixComparators.BINARY)
       timer.stopTiming()
+      println("Num compares: " + compares.get())
     }
     benchmark.addTimerCase("codegen qsort key prefix array") { timer =>
       val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }

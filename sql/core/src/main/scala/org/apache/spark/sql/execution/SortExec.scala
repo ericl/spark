@@ -363,7 +363,10 @@ object SortExec {
           }
         }
 
+        java.util.concurrent.atomic.AtomicLong numCompares =
+          new java.util.concurrent.atomic.AtomicLong();
         private final int comparePrefix(long a, long b) {
+          numCompares.getAndIncrement();
           $prefixComparatorCode
         }
 
@@ -382,6 +385,7 @@ object SortExec {
         public void sort(org.apache.spark.unsafe.array.LongArray arr, int lo, int hi) {
           assert lo == 0 : "Base offset must be zero";
           sort1(arr, 0, hi);
+          System.out.println("Num compares: " + numCompares.get());
         }
       }"""
 
