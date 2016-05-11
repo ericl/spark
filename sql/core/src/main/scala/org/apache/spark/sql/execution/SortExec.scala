@@ -70,7 +70,8 @@ case class SortExec(
     val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
-    val genSort = genSorter(ordering, prefixComparator)
+    val genSort = genSorter(
+      sortOrder.map(s => BindReferences.bindReference(s, output)), prefixComparator)
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
@@ -90,9 +91,8 @@ case class SortExec(
     sorter
   }
 
-  def genSorter(ordering: Ordering[InternalRow], pcmp: PrefixComparator): UnsafeSorter = {
+  def genSorter(ordering: Seq[SortOrder], pcmp: PrefixComparator): UnsafeSorter = {
     val ctx = new CodegenContext()
-    ctx.addReferenceObj("ordering", ordering, "scala.math.Ordering")
     ctx.addReferenceObj(
       "memoryManager",
       TaskContext.get().taskMemoryManager(),
@@ -126,6 +126,8 @@ case class SortExec(
     ctx.addMutableState(
       "org.apache.spark.sql.catalyst.expressions.UnsafeRow", "row2",
       "row2 = new UnsafeRow(numFields);")
+
+    val comparisons = GenerateOrdering.genComparisons(ctx, ordering)
 
     val code = s"""
       public SpecificUnsafeSorter generate(Object[] references) {
@@ -286,7 +288,11 @@ case class SortExec(
             Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
           row1.pointTo(baseObj1, baseOff1, -1);
           row2.pointTo(baseObj2, baseOff2, -1);
-          return ordering.compare(row1, row2);
+          org.apache.spark.sql.catalyst.expressions.UnsafeRow a = row1;
+          org.apache.spark.sql.catalyst.expressions.UnsafeRow b = row2;
+          org.apache.spark.sql.catalyst.expressions.UnsafeRow ${ctx.INPUT_ROW} = null;
+          $comparisons
+          return 0;
         }
 
         @Override
