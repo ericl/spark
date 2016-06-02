@@ -21,7 +21,7 @@ import java.util.{Arrays, Comparator}
 
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
-import org.apache.spark.util.Benchmark
+import org.apache.spark.util.{Benchmark, StringPiece}
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.collection.unsafe.sort._
 import org.apache.spark.util.random.XORShiftRandom
@@ -51,6 +51,94 @@ class SortBenchmark extends BenchmarkBase {
     val extended = ref ++ Array.fill[Long](size * 2)(0)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
       new LongArray(MemoryBlock.fromLongArray(extended)))
+  }
+
+  case class Node(left: Node, right: Node) {
+    // scalastyle:off
+    val const = "CCCCCCCCCodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNodeodegenEntireSuperGiantTreePlanNodePhysicalNodeCodegenEntireSuperGiantTreePlanNodePhysicalNode"
+    // scalastyle:on
+
+    override def toString: String = s"Node($left, $right, $const)"
+
+    def appendTo(builder: StringBuilder): Unit = {
+      builder.append("Node(")
+      if (left != null) {
+        left.appendTo(builder)
+      } else {
+        builder.append("null")
+      }
+      builder.append(", ")
+      if (right != null) {
+        right.appendTo(builder)
+      } else {
+        builder.append("null")
+      }
+      builder.append(", ")
+      builder.append(const)
+      builder.append(")")
+    }
+
+    def toStringBuilder(): String = {
+      val builder = new StringBuilder()
+      appendTo(builder)
+      builder.toString
+    }
+
+    def toStringPiece: StringPiece = {
+      val lstr = if (left != null) {
+        left.toStringPiece
+      } else {
+        "null"
+      }
+      val rstr = if (right != null) {
+        right.toStringPiece
+      } else {
+        "null"
+      }
+      new StringPiece(Array("Node(", lstr, ", ", rstr, ", ", const, ")"))
+    }
+  }
+
+  test("StringPiece") {
+    val n = 1000
+    val benchmark = new Benchmark("string piece", n)
+    var node = Node(null, null)
+    for (i <- 1 to n) {
+      node = Node(node, null)
+    }
+    benchmark.addTimerCase("plain to string") { timer =>
+      System.gc()
+      timer.startTiming()
+      node.toString()
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("stringbuilder to string") { timer =>
+      System.gc()
+      timer.startTiming()
+      node.toStringBuilder()
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("stringpiece only") { timer =>
+      System.gc()
+      timer.startTiming()
+      node.toStringPiece
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("stringpiece to string") { timer =>
+      System.gc()
+      timer.startTiming()
+      node.toStringPiece.toString()
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("stringpiece to string trimmed") { timer =>
+      System.gc()
+      timer.startTiming()
+      val sp = node.toStringPiece
+      val res = new StringPiece(Array("Test(", "HelloWorld", ", ", sp, ")"))
+      println(res.trimmed(300))
+      timer.stopTiming()
+    }
+    benchmark.run()
   }
 
   ignore("sort") {
