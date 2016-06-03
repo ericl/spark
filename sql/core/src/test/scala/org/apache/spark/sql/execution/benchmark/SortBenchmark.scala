@@ -53,7 +53,7 @@ class SortBenchmark extends BenchmarkBase {
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
-  ignore("sort") {
+  test("sort") {
     val size = 25000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort " + size, size)
