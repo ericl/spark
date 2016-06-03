@@ -1,0 +1,33 @@
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+2500 cols x 40 rows (exec in-mem)             2003 / 2075          0.0       20029.5       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+wide struct field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+2500 wide x 40 rows (exec in-mem)             1632 / 1683          0.1       16318.4       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+500 wide x 200 rows (exec in-mem)             1545 / 1548          0.1       15448.2       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+deeply nested struct field r/w:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+250 deep x 400 rows (exec in-mem)             2650 / 2701          0.0       26498.0       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+bushy struct field r/w:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 x 1 deep x 100000 rows (exec in-mem)          66 /   86          1.5         661.7       1.0X
+16 x 5 deep x 10000 rows (exec in-mem)          69 /   95          1.5         687.3       1.0X
+128 x 8 deep x 1000 rows (exec in-mem)         289 /  304          0.3        2885.3       0.2X
+512 x 10 deep x 200 rows (exec in-mem)        1505 / 1620          0.1       15045.5       0.0X
+
