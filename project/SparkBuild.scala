@@ -828,6 +828,8 @@ object TestSettings {
     javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
+    javaOptions in Test += "-XX:+UnlockCommercialFeatures",
+    javaOptions in Test += "-XX:+FlightRecorder",
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
