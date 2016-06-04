@@ -448,10 +448,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case tn: TreeNode[_] => tn.simpleString :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => seq.take(25).mkString("[", ", ", "]") :: Nil
-    case set: Set[_] => set.take(25).mkString("{", ", ", "}") :: Nil
+    case seq: Seq[_] => seq.take(25).mkString("-[", ", ", "]") :: Nil
+    case set: Set[_] => set.take(25).mkString("-{", ", ", "}") :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => array.take(25).mkString("[", ", ", "]") :: Nil
+    case array: Array[_] => array.take(25).mkString("-[", ", ", "]") :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil

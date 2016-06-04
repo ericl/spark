@@ -123,7 +123,7 @@ private[sql] case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${output.take(25).mkString("[", ",", "]")}"
   }
 }
 
