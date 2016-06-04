@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
@@ -32,19 +31,8 @@ import org.apache.spark.sql.types._
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends LeafExpression {
 
-  // The performance overhead of creating and logging strings for wide schemas can be large. To
-  // limit the impact, we bound the number of fields to include by default.
-  // TODO(ekl) we should also optimize expression string generation to use StringBuilder
-  private def maxToStringFields = {
-    var fields = 2500
-    if (SparkEnv.get != null) {
-      fields = SparkEnv.get.conf.getInt("spark.sql.debug.MaxToStringFields", fields)
-    }
-    fields
-  }
-
   override def toString: String =
-    s"input[$ordinal, ${dataType.simpleString(maxToStringFields)}, $nullable]"
+    s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {

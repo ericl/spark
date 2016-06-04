@@ -51,7 +51,7 @@ private[spark] class Benchmark(
     valuesPerIteration: Long,
     minNumIters: Int = 2,
     warmupTime: FiniteDuration = 2.seconds,
-    minTime: FiniteDuration = 2.seconds,
+    minTime: FiniteDuration = 15.seconds,
     outputPerIteration: Boolean = false,
     output: Option[OutputStream] = None) {
   import Benchmark._
