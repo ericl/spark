@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import com.google.common.collect.Maps
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -86,30 +88,40 @@ package object expressions  {
   /**
    * Helper functions for working with `Seq[Attribute]`.
    */
-  implicit class AttributeSeq(val attrs: Seq[Attribute]) {
+  implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
     }
 
-    private lazy val inputArr = attrs.toArray
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
+    // to an array.
+    @transient private lazy val attrsArray = attrs.toArray
 
-    private lazy val inputToOrdinal = {
-      val map = new java.util.HashMap[ExprId, Int](inputArr.length * 2)
-      var index = 0
-      attrs.foreach { attr =>
-        if (!map.containsKey(attr.exprId)) {
-          map.put(attr.exprId, index)
-        }
-        index += 1
+    @transient private lazy val exprIdToOrdinal = {
+      val arr = attrsArray
+      val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
+      // Iterate over the array in reverse order so that the final map value is the first attribute
+      // with a given expression id.
+      var index = arr.length - 1
+      while (index >= 0) {
+        map.put(arr(index).exprId, index)
+        index -= 1
       }
       map
     }
 
-    def apply(ordinal: Int): Attribute = inputArr(ordinal)
+    /**
+     * Returns the attribute at the given index.
+     */
+    def apply(ordinal: Int): Attribute = attrsArray(ordinal)
 
-    def getOrdinal(exprId: ExprId): Int = {
-      Option(inputToOrdinal.get(exprId)).getOrElse(-1)
+    /**
+     * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
+     */
+    def indexOf(exprId: ExprId): Int = {
+      Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
     }
   }
 
