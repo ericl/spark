@@ -41,9 +41,9 @@ import org.apache.spark.network.util.ByteUnit
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("truncatedString") {
-    assert(Utils.truncatedString(Nil, "[", ", ", "]", 1) == "[]")
-    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 1) == "[1, 2]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 1) == "[1, ... 2 more fields]")
+    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
+    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
     assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "[1, 2, 3]")
   }
 
