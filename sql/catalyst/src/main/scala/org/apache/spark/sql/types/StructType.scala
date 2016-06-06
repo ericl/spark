@@ -27,6 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -292,18 +293,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  // The performance overhead of creating and logging strings for wide schemas can be large. To
-  // limit the impact, we bound the number of fields to include by default.
-  // TODO(ekl) we should also optimize expression string generation to use StringBuilder
-  private def maxToStringFields = {
-    var fields = 25
-    if (SparkEnv.get != null) {
-      fields = SparkEnv.get.conf.getInt("spark.sql.maxStructTypeToStringFields", fields)
-    }
-    fields
+  override def simpleString: String = {
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">")
   }
-
-  override def simpleString: String = simpleString(maxToStringFields)
 
   override def sql: String = {
     val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
@@ -315,16 +308,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.take(maxNumberFields).map {
       case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
-    builder.append("struct<")
-    builder.append(fieldTypes.mkString(", "))
-    if (fields.length > 2) {
-      if (fields.length - fieldTypes.length == 1) {
-        builder.append(" ... 1 more field")
-      } else {
-        builder.append(" ... " + (fields.length - 2) + " more fields")
-      }
-    }
-    builder.append(">").toString()
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
   }
 
   /**

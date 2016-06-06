@@ -2,8 +2,5 @@ Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
 Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
 wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-2000 wide x 50 rows (read in-mem)               46 /   91          2.2         461.8       1.0X
-2000 wide x 50 rows (exec in-mem)             1035 / 1202          0.1       10346.9       0.0X
-2000 wide x 50 rows (read parquet)             513 /  663          0.2        5129.2       0.1X
-2000 wide x 50 rows (write parquet)            103 /  170          1.0        1027.8       0.4X
+2000 wide x 50 rows (exec in-mem)             3750 / 3974          0.0       37499.8       1.0X
 
