@@ -101,7 +101,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("parsing large select expressions") {
+  ignore("parsing large select expressions") {
     val benchmark = new Benchmark("parsing large select", 1, output = Some(out))
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
@@ -119,6 +119,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       val df = sparkSession.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
+      println(df.queryExecution)
       df.count()  // force caching
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
@@ -126,7 +127,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
 
   }
 
-  test("wide struct field read and write") {
+  ignore("wide struct field read and write") {
     val benchmark = new Benchmark("wide struct field r/w", scaleFactor, output = Some(out))
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
@@ -146,7 +147,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("wide shallowly nested struct field read and write") {
+  ignore("wide shallowly nested struct field read and write") {
     val benchmark = new Benchmark(
       "wide shallowly nested struct field r/w", scaleFactor, output = Some(out))
     for (width <- Seq(2000)) {
@@ -168,7 +169,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("deeply nested struct field read and write") {
+  ignore("deeply nested struct field read and write") {
     val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor, output = Some(out))
     for (depth <- depthsToTest) {
       val numRows = scaleFactor / depth
@@ -185,7 +186,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("bushy struct field read and write") {
+  ignore("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor, output = Some(out))
     for (width <- Seq(1000)) {
       val numRows = scaleFactor / width
@@ -208,7 +209,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("wide array field read and write") {
+  ignore("wide array field read and write") {
     val benchmark = new Benchmark("wide array field r/w", scaleFactor, output = Some(out))
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
@@ -228,7 +229,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("wide map field read and write") {
+  ignore("wide map field read and write") {
     val benchmark = new Benchmark("wide map field r/w", scaleFactor, output = Some(out))
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
