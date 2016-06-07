@@ -32,9 +32,10 @@ import org.apache.spark.sql.types.DataType
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
  */
 case class ScalarSubquery(
-    @transient executedPlan: SparkPlan,
+    executedPlan: SparkPlan,
     exprId: ExprId)
   extends SubqueryExpression {
+    assert(executedPlan != null)
 
   override def query: LogicalPlan = throw new UnsupportedOperationException
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression = {
@@ -42,7 +43,9 @@ case class ScalarSubquery(
   }
   override def plan: SparkPlan = SubqueryExec(simpleString, executedPlan)
 
-  override def dataType: DataType = executedPlan.schema.fields.head.dataType
+  override def dataType: DataType = {
+    executedPlan.schema.fields.head.dataType
+  }
   override def children: Seq[Expression] = Nil
   override def nullable: Boolean = true
   override def toString: String = s"subquery#${exprId.id}"
