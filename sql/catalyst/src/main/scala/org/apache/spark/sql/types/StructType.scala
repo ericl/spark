@@ -294,7 +294,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
     Utils.truncatedString(fieldTypes, "struct<", ",", ">")
   }
 
@@ -308,7 +308,16 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.take(maxNumberFields).map {
       case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
-    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
+    builder.append("struct<")
+    builder.append(fieldTypes.mkString(", "))
+    if (fields.length > 2) {
+      if (fields.length - fieldTypes.length == 1) {
+        builder.append(" ... 1 more field")
+      } else {
+        builder.append(" ... " + (fields.length - 2) + " more fields")
+      }
+    }
+    builder.append(">").toString()
   }
 
   /**
