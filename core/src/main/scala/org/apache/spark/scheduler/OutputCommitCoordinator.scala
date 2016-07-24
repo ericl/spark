@@ -85,6 +85,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: StageId,
       partition: PartitionId,
       attemptNumber: TaskAttemptNumber): Boolean = {
+    println("canCommit: " + stage + " " + partition + " attemptNumber")
     val msg = AskPermissionToCommitOutput(stage, partition, attemptNumber)
     coordinatorRef match {
       case Some(endpointRef) =>
@@ -106,6 +107,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private[scheduler] def stageStart(
       stage: StageId,
       maxPartitionId: Int): Unit = {
+    println("stageStart: " + stage + " " + maxPartitionId)
     val arr = new Array[TaskAttemptNumber](maxPartitionId + 1)
     java.util.Arrays.fill(arr, NO_AUTHORIZED_COMMITTER)
     synchronized {
@@ -115,6 +117,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
 
   // Called by DAGScheduler
   private[scheduler] def stageEnd(stage: StageId): Unit = synchronized {
+    println("stageEnd: " + stage)
     authorizedCommittersByStage.remove(stage)
   }
 
@@ -124,6 +127,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       partition: PartitionId,
       attemptNumber: TaskAttemptNumber,
       reason: TaskEndReason): Unit = synchronized {
+    println("taskCompleted: " + stage)
     val authorizedCommitters = authorizedCommittersByStage.getOrElse(stage, {
       logDebug(s"Ignoring task completion for completed stage")
       return
@@ -156,6 +160,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       stage: StageId,
       partition: PartitionId,
       attemptNumber: TaskAttemptNumber): Boolean = synchronized {
+    println("askPermissionToCommit: " + stage)
     authorizedCommittersByStage.get(stage) match {
       case Some(authorizedCommitters) =>
         authorizedCommitters(partition) match {

@@ -56,6 +56,7 @@ private[sql] class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
+  println("constructed ParquetFileFormat")
 
   override def shortName(): String = "parquet"
 
@@ -70,6 +71,7 @@ private[sql] class ParquetFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    println("prepareWrite!")
 
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
 
@@ -135,6 +137,7 @@ private[sql] class ParquetFileFormat
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
+        println("factory: new ParquetOutputWriter")
         new ParquetOutputWriter(path, bucketId, context)
       }
     }
@@ -423,6 +426,7 @@ private[sql] class ParquetOutputWriterFactory(
     dataSchema: StructType,
     hadoopConf: Configuration,
     options: Map[String, String]) extends OutputWriterFactory {
+  println("new ParquetOutputWriterFactory")
 
   private val serializableConf: SerializableConfiguration = {
     val job = Job.getInstance(hadoopConf)
@@ -519,6 +523,7 @@ private[sql] class ParquetOutputWriter(
     bucketId: Option[Int],
     context: TaskAttemptContext)
   extends OutputWriter {
+  println("new ParquetOutputWriter")
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
     val outputFormat = {
@@ -539,6 +544,7 @@ private[sql] class ParquetOutputWriter(
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
+          println("work file is: " + split)
           // It has the `.parquet` extension at the end because (de)compression tools
           // such as gunzip would not be able to decompress this as the compression
           // is not applied on this whole file but on each "page" in Parquet format.

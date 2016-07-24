@@ -61,6 +61,7 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
     HadoopRDD.addLocalConfiguration("", 0, 0, 0, conf.value)
 
     val jCtxt = getJobContext()
+    println("outputCommitter::setupJob")
     getOutputCommitter().setupJob(jCtxt)
   }
 
@@ -86,12 +87,14 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
       }
     }
 
+    println("outputCommitter::setupTask")
     getOutputCommitter().setupTask(getTaskContext())
     writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
   }
 
   def write(key: AnyRef, value: AnyRef) {
     if (writer != null) {
+      println("write")
       writer.write(key, value)
     } else {
       throw new IOException("Writer is null, open() has not been called")
@@ -103,11 +106,13 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
   }
 
   def commit() {
+    println("commit")
     SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
   }
 
   def commitJob() {
     val cmtr = getOutputCommitter()
+    println("outputCommitter:commitJob")
     cmtr.commitJob(getJobContext())
   }
 
