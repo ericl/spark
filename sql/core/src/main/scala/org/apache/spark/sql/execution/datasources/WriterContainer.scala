@@ -86,6 +86,7 @@ private[sql] abstract class BaseWriterContainer(
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit
 
   def driverSideSetup(): Unit = {
+    println("driverSideSetup")
     setupIDs(0, 0, 0)
     setupConf()
 
