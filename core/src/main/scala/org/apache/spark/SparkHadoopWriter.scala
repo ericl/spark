@@ -40,6 +40,7 @@ import org.apache.spark.util.SerializableJobConf
  */
 private[spark]
 class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
+  println("construct SparkHadoopWriter")
 
   private val now = new Date()
   private val conf = new SerializableJobConf(jobConf)

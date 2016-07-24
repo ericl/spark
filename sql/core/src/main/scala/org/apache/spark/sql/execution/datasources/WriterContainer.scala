@@ -207,6 +207,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitTask(): Unit = {
+    println("ds commitTask")
     SparkHadoopMapRedUtil.commitTask(outputCommitter, taskAttemptContext, jobId.getId, taskId.getId)
   }
 
@@ -218,6 +219,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitJob(): Unit = {
+    println("ds commitJob")
     outputCommitter.commitJob(jobContext)
     logInfo(s"Job $jobId committed.")
   }

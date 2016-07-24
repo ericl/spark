@@ -111,6 +111,7 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   def commitJob() {
+    println("commitJob")
     committer.commitJob(jobContext)
   }
 
@@ -234,6 +235,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
   }
 
   override def commitJob(): Unit = {
+    println("dynamic commitJob")
     // This is a hack to avoid writing _SUCCESS mark file. In lower versions of Hadoop (e.g. 1.0.4),
     // semantics of FileSystem.globStatus() is different from higher versions (e.g. 2.4.1) and will
     // include _SUCCESS file when glob'ing for dynamic partition data files.
