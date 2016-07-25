@@ -66,6 +66,7 @@ class ListingFileCatalog(
   }
 
   override def refresh(): Unit = {
+    println("------refresh---")
     val files = listLeafFiles(paths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)

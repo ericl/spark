@@ -577,6 +577,7 @@ class DAGScheduler(
           "Total number of partitions: " + maxPartitions)
     }
 
+    println("----------assignJobId-----")
     val jobId = nextJobId.getAndIncrement()
     println("jobId: " + jobId)
     if (partitions.size == 0) {
