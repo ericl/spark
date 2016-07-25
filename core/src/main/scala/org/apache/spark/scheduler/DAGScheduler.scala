@@ -578,6 +578,7 @@ class DAGScheduler(
     }
 
     val jobId = nextJobId.getAndIncrement()
+    println("jobId: " + jobId)
     if (partitions.size == 0) {
       // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)

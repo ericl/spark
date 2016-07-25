@@ -86,7 +86,7 @@ private[sql] abstract class BaseWriterContainer(
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit
 
   def driverSideSetup(): Unit = {
-    println("driverSideSetup")
+    println("driverSideSetup: " + relation.sparkSession.sparkContext.getLocalProperty("txnId"))
     setupIDs(0, 0, 0)
     setupConf()
 
@@ -111,6 +111,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def executorSideSetup(taskContext: TaskContext): Unit = {
+    println("setup executor: " + taskContext.getLocalProperty("txnId"))
     setupIDs(taskContext.stageId(), taskContext.partitionId(), taskContext.attemptNumber())
     setupConf()
     taskAttemptContext = new TaskAttemptContextImpl(serializableConf.value, taskAttemptId)
@@ -220,12 +221,13 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitJob(): Unit = {
-    println("ds commitJob")
+    println("ds commitJob " + jobId)
     outputCommitter.commitJob(jobContext)
     logInfo(s"Job $jobId committed.")
   }
 
   def abortJob(): Unit = {
+    println("abortJob " + jobId)
     if (outputCommitter != null) {
       outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
     }
