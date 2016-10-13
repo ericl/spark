@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.FileNotFoundException
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
