@@ -26,7 +26,7 @@ private[spark] object StaticSources {
    * The set of all static sources. These sources may be reported to from any class, including
    * static classes, without requiring reference to a SparkEnv.
    */
-  val allSources = Seq(CodegenMetrics)
+  val allSources = Seq(CodegenMetrics, HiveCatalogMetrics)
 }
 
 /**
