@@ -40,7 +40,7 @@ abstract class PartitioningAwareFileCatalog(
     parameters: Map[String, String],
     partitionSchema: Option[StructType])
   extends SessionFileCatalog(sparkSession) with FileCatalog {
-  import PartitioningAwareFileCatalog._
+  import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
   override protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
