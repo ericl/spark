@@ -124,6 +124,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
           // of doing plan cache validation based on the entire partition set.
           HiveCatalogMetrics.reset()
           spark.sql("select * from test where partCol1 = 999").count()
+          // 5 from table resolution, another 5 from ListingFileCatalog
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
 
