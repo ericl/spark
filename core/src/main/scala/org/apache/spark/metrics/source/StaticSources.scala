@@ -80,6 +80,9 @@ object HiveCatalogMetrics extends Source {
    */
   val METRIC_FILES_DISCOVERED = metricRegistry.counter(MetricRegistry.name("filesDiscovered"))
 
+  /**
+   * Resets the values of all metrics to zero. This is useful in tests.
+   */
   def reset(): Unit = {
     METRIC_PARTITIONS_FETCHED.dec(METRIC_PARTITIONS_FETCHED.getCount())
     METRIC_FILES_DISCOVERED.dec(METRIC_FILES_DISCOVERED.getCount())
