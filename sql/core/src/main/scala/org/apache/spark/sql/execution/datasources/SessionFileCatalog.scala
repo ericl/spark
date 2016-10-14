@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 
 
@@ -48,6 +49,12 @@ abstract class SessionFileCatalog(sparkSession: SparkSession)
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+    val res = listLeafFiles0(paths)
+    HiveCatalogMetrics.incrementFilesDiscovered(res.size)
+    res
+  }
+
+  private def listLeafFiles0(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
     } else {
@@ -106,7 +113,7 @@ abstract class SessionFileCatalog(sparkSession: SparkSession)
       if (dirs.isEmpty) {
         mutable.LinkedHashSet(files: _*)
       } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
+        mutable.LinkedHashSet(files: _*) ++ listLeafFiles0(dirs.map(_.getPath))
       }
     }
   }
