@@ -77,7 +77,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
     }
   }
 
-  test("metastore partition pruning reads only necessary partition data") {
+  test("lazy partition pruning reads only necessary partition data") {
     withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> "true") {
       withTable("test") {
         withTempDir { dir =>
