@@ -213,8 +213,9 @@ class HookCallingExternalCatalog(val delegate: ExternalCatalog, val hooks: Catal
       table: String,
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = {
-    delegate.dropPartitions(db, table, parts, ignoreIfNotExists, purge)
+      purge: Boolean,
+      retainData: Boolean): Unit = {
+    delegate.dropPartitions(db, table, parts, ignoreIfNotExists, purge, retainData)
   }
 
   override def renamePartitions(
