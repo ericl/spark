@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
+import java.io.{File, FileInputStream, FileOutputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -357,18 +357,32 @@ final class ShuffleBlockFetcherIterator(
           }
 
           input = streamWrapper(blockId, in)
-          // Only copy the stream if it's wrapped by compression or encryption, also the size of
-          // block is small (the decompressed block is smaller than maxBytesInFlight)
-          if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+          // Only copy the stream if it's wrapped by compression or encryption.
+          if (detectCorrupt && !input.eq(in)) {
             val originalInput = input
-            val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+            var tmpFile: File = null
+            val out = if (size < maxBytesInFlight / 3) {
+              new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+            } else {
+              // Always spill large blocks to disk to avoid OOMs.
+              val (_, file) = blockManager.diskBlockManager.createTempLocalBlock()
+              tmpFile = file
+              new FileOutputStream(file)
+            }
             try {
-              // Decompress the whole block at once to detect any corruption, which could increase
-              // the memory usage tne potential increase the chance of OOM.
-              // TODO: manage the memory used here, and spill it into disk in case of OOM.
+              // Decompress the whole block here to detect any corruption early.
               Utils.copyStream(input, out)
               out.close()
-              input = out.toChunkedByteBuffer.toInputStream(dispose = true)
+              if (tmpFile != null) {
+                input = new FileInputStream(tmpFile) {
+                  override def close() {
+                    tmpFile.delete()
+                  }
+                }
+              } else {
+                input = out.asInstanceOf[ChunkedByteBufferOutputStream]
+                  .toChunkedByteBuffer.toInputStream(dispose = true)
+              }
             } catch {
               case e: IOException =>
                 buf.release()
