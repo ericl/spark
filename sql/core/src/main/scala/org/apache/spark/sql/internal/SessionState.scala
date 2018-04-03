@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface

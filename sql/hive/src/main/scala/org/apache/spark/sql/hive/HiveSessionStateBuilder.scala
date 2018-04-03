@@ -36,7 +36,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   extends BaseSessionStateBuilder(session, parentState) {
 
   private def externalCatalog: HiveExternalCatalog =
-    session.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+    session.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
 
   /**
    * Create a Hive aware resource loader.
